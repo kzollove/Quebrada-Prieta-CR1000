@@ -16,43 +16,8 @@
 			
 		Public PTemp, batt_volt, ComStatus As Boolean,RavenPortOn' measurement variables
 	   Const meas_freq = 15 ' minutes, measurement frequency
-	   Const suna_scans=22 '  number of scans at meas_freq
-	   Const buf_scan=(suna_scans-5) ' buffer scans
-	   Const suna_delay = 35 ' seconds
 	   Const MinBatteryVoltage = 11.2 ' battery voltage at which to stop the SUNA
 		 Public rTime(9),FullTime 'declare as public and dimension rTime to 9
-		 Const NDays= 180 ' no of days of data stored in card.
-	   Const Ndata = NDays*(60/meas_freq)*24*suna_scans ' for long frames
-	   Const SData=((60/meas_freq)*24*NDays)*10' multiply the number by 10 .
-	  
-	    'WaterLevel Pressure Sensor
-		Dim FRun
-		Dim Old
-		Dim Changed
-		Public CS451
-		Public Observed
-		Public Lvl_corr
-		Public Offset
-		
-		Alias CS451=Lvl_cm
-		
-		Units Lvl_cm=centimeters
-	  
-	
-			'SUNA
-			Public RawString As String *2000, NBytesReturned As String * 16
-			'Declare Other Variables
-      Public SUNA_parse(10) 
-		'Assign aliases to the public array
-	    Alias SUNA_parse(2)=DayofYear2
-      Alias SUNA_parse(3)=TimeofDayUTC2
-     	Alias SUNA_parse(4)=Nitrate_um2
-      Alias SUNA_parse(5)=Nitrate_mgL2
-      Alias SUNA_parse(6)=Absorbance_2542
-      Alias SUNA_parse(7)=Absorbance_3502
-      Alias SUNA_parse(8)=Bromide2
-      Alias SUNA_parse(9)=LightAverage2
-      Alias SUNA_parse(10)=DarkAverage2
 
 	  ' YSI EXO
 	Const SDI12Vals = 13 'max number SDI12 values to be returned
@@ -85,19 +50,6 @@
      Alias rTime(6) = Second        'assign the alias Second to rTime(6)
      Alias rTime(9) = Day_of_Year   'assign the alias Day_of_Year to rTime(9)
 	  
-		 ' New Variables to read the SUNA V2 correctly
-      Public  NO3Vals(20), AvgNO3, M, K, L, SUMNO3, temp
-      Alias K = ValidMeas
-      Public NO3Vals2(20), Abs254vals(20),Abs350vals(20),Brvals(20),Lvals(20)
-      Public SumNO32,SumAbs254,SumAbs350,SumBr,SumL
-      Public Nitrate_mgL,Nitrate_um,Absorbance_254,Absorbance_350,Bromide,LightAverage
-	
-	' EOS CO2 Variables
-	'S/N GP20190065
-			Public LowEOSCO2_mv(20), LowEOSCO2_ppm(20), LowEOStemp, SUMCO2,LowEOSCO2_ppm_avg  
-			Dim I, J, EOSTempmV, EOSTempC, HighEOSCO2_mv(20), HighEOSCO2_ppm(20), HighEOStemp, SUMHighCO2, HighEOSCO2_ppm_avg
-			Dim N, P
-	   
        
 		'|||||||||||||||||PROGRAM CONSTANTS||||||||||||||||||||||||||||||||||||||||||||||||||
 			
@@ -107,81 +59,20 @@
 			Public BattVolt ' measure the voltage being received
       
 			'Data Tables
-			DataTable (SUNARaw,1,-1) '-1 for auto-allocate memory.
-			CardOut (1,Ndata)' 
-			Sample (1,RawString(),String)
-			EndTable                
-			 
+
 			DataTable (WQual,1,-1)
 		   CardOut (0,SData)' enough for 180 days of data.
   	 Sample (1,PTemp,FP2)
 	  Minimum (1,batt_volt,FP2,0,False)
-	  Sample (1,Nitrate_um,IEEE4)
-     Sample (1,Nitrate_mgL,IEEE4)		  
- 	  Sample (1,Absorbance_254,IEEE4)
-	  Sample (1,Absorbance_350,IEEE4)			  
-	  Sample (1,Bromide,IEEE4)			  
-	  Sample (1,LightAverage,IEEE4)
-	  Sample(SDI12Vals,YSI(),IEEE4) 
-	 Sample (1,LowEOSCO2_ppm_avg, IEEE4)
-	 Sample (1, HighEOSCO2_ppm_avg, IEEE4)
-	 Sample (1, EOSTempC, IEEE4)
-            Sample (1,Lvl_cm, IEEE4)
+	  Sample(SDI12Vals,YSI(),IEEE4)
            EndTable  
     
 
     
-			DataTable (SUNAShortRaw,1,-1) '-1 for auto-allocate memory.
-		  ' This table stores only the parsed strings of data. A short table, not for use beyond the code.
-		  ' entries stored in ring mode
-			CardOut (0,2000)' 
-	  Sample (1, FullTime, IEEE4 )        
-      Sample (1,Nitrate_um2,IEEE4)
-      Sample (1,Nitrate_mgL2,IEEE4)	
- 	  Sample (1,Absorbance_2542,IEEE4)
-      Sample (1,Absorbance_3502,IEEE4)			  
-      Sample (1,Bromide2,IEEE4)			  
-	  Sample (1,LightAverage2,IEEE4)
-			EndTable       
 			
-			' Low EOS CO2 tables
-			DataTable (LowEOSCO2Full,1,-1)
-			CardOut (0,100000)
-			Sample(20,LowEOSCO2_mv(),IEEE4)  
-			Sample(20,LowEOSCO2_ppm(),IEEE4)  
-			EndTable 
-			DataTable (LowEOSCO2Short,1,-1)
-			CardOut (0,10000)
-      		Sample(1,LowEOSCO2_ppm_avg, IEEE4)
-			EndTable 
-
-       
 			
 			'||||||||||||||||||||||||||||||||||| SUBROUTINES||||||||||||||||||||||||||||||||||||
-			Sub nitrateMeasurements
-			  ' SUNa is Full ASCII mode,
-			  ' create an active com2 port.
-			  ' VERY IMPORTANT: SUNA likes it when the port is active and then the power is switched on. so create active com  port first, and then turn the power on .
-			  'SUNA may not talk to the data logger if the steps are reversed.
-					SerialOpen (Com2,38400,0,0,25000)'open com port w/ correct port settings AND enough Data
-			  ' get panel temp. and battery voltage for transmitting with data record.
-			     	PanelTemp (PTemp,250)
-			    	Battery (batt_volt)
-						      SW12(1) ' switch on power to SUNA 
-			        		Delay(0,suna_delay,Sec) ' 
-				           	Scan(1550, mSec, 2,suna_scans )   
-			     	            SerialInRecord (Com2,RawString,83,0,&H0D0A,NBytesReturned,00) ' read each scan with a start of text character 
-															SplitStr (SUNA_parse(),RawString,0,10,0) 
-													'			AvgRun (SUNA(),10,SUNA_parse(),suna_scans-1) 
-		'     	            &H53&H41 "SA in SAT.... instrument code."
-						        CallTable SUNARaw '
-					         CallTable SUNAShortRaw
-						        NextScan								
-			   		            SW12(0)'shut down SUNA
-					  	        SerialClose (Com2) ' 
-							    EndSub 
 
-								''''''''''''''''''''''''''
 			Sub YSIMeasurements
 			 Scan( 65, Sec, 1,1 )   ' scan for roughly 1 minute to allow the ysi to send the data.
 				  Move (YSI(),SDI12Vals,NAN,1)
@@ -199,100 +90,7 @@
 		
 			  NextScan
 		 EndSub
-		 
-		 ''''''''''''''''''''''''''''''
-		 Sub LowEOS_CO2Measurements
-		 	'Lisle says that this temperature data is probably off. It will be here just in case
-		 	VoltDiff(EOSTempmV, 1, mV5000, 2, False, 0, 250, 1 ,0)
-			EOSTempC = (((EOSTempmV/1000)*14) - 20) - 2.106
-			
-			
-			  ' read 20 measurements of CO2 
-          For J=1 To 20
-					VoltDiff(LowEOSCO2_mv(J), 1, mV5000, 5, False, 0, 250, 1, 0)
-
-					' calculate CO2 in ppm ' NOTE: use the appropriate regression parameters determined through Calibration!!
-					' convert the voltage from milli volts to Volts and then apply the regression equation for CO2 meter 03123C0D
-					 LowEOSCO2_ppm(J) = (LowEOSCO2_mv(J)/1000 - 0.034194) / 0.00067695
- 					Delay(0,100,mSec) 
-					Next J
-							
-					' perform a basic QA/QC to remove  outliers
-					 For J=1 To 20
-					   I=0
-					   SUMCO2=0
-					 LowEOSTemp=LowEOSCO2_ppm(J)
-					 ' The range of 100 to 6000 ppm is considered valid by user manual for EOS
-					 If ( LowEOSTemp <6000 AND LowEOSTemp > 100)
-					SUMCO2=SUMCO2+LowEOSTemp
-					I=I+1
-					 EndIf 
-					Next J
-					' if for some reason there are no valid CO2 values
-					If ( I=0)
-           LowEOSCO2_ppm_avg = NaN
-           Else
-             ' get average of the valid CO2 values
-           LowEOSCO2_ppm_avg = SUMCO2/I
-					EndIf
-					
-			   
-			EndSub 
-			
-			
-					 ''''''''''''''''''''''''''''''
-		 Sub HighEOS_CO2Measurements
-
-			  ' read 20 measurements of CO2 
-          For N=1 To 20
-					VoltDiff(HighEOSCO2_mv(N), 1, mV5000, 6, False, 0, 250, 1, 0)
-
-					' calculate CO2 in ppm ' NOTE: use the appropriate regression parameters determined through Calibration!!
-					' convert the voltage from milli volts to Volts and then apply the regression equation for CO2 meter 03123C0D
-					 HighEOSCO2_ppm(N) = (HighEOSCO2_mv(N)/1000 - 0.00783) / 0.00016614
- 					Delay(0,100,mSec) 
-					Next N
-							
-					' perform a basic QA/QC to remove  outliers
-					 For N=1 To 20
-					   P=0
-					   SUMHighCO2=0
-					 HighEOSTemp=HighEOSCO2_ppm(N)
-					 ' The range of 100 to 24000 ppm is considered valid by user manual for EOS
-					 If ( HighEOSTemp <24000 AND HighEOSTemp > 100)
-					SUMHighCO2=SUMHighCO2+HighEOSTemp
-					P=P+1
-					 EndIf 
-					Next N
-					' if for some reason there are no valid CO2 values
-					If ( P=0)
-           HighEOSCO2_ppm_avg = NaN
-           Else
-             ' get average of the valid CO2 values
-           HighEOSCO2_ppm_avg = SUMHighCO2/P 
-					EndIf
-					
-			   
-			EndSub 
-			''''''''''''''''''''''''''''''''''''''''''
-			Sub WaterLevel_Measurements
-			' Original command was SDI12Recorder(Lvl_cm,C1,"0","M1!",1,0,-1)
-			SDI12Recorder(Lvl_cm,7,"0","M1!",1,0)
-				Lvl_cm=Lvl_cm*70.324
-				'Offset calculation 'Offset'
-			If FRun=0 Then
-				Observed=300
-				FRun=1
-			EndIf
-				Changed=Observed-Old
-			If Changed=0 Then
-				Lvl_corr=Lvl_cm+Offset
-			Else
-				Offset=Observed-Lvl_cm
-				Lvl_corr=Lvl_cm+Offset
-				Old=Observed
-			EndIf
-			EndSub
+		
 			  
 			'||||||||||||||||||||||||||||||||||PROGRAM||||||||||||||||||||||||||||||||||||
 					BeginProg
@@ -304,80 +102,14 @@
     			
 					PortSet (RavenPort, RavenPortOn)  'When PortOn = 1, port will be set high
 				
-			If TimeIntoInterval (0,meas_freq,Min)  ' to set the SUNA to start every 15 minutes, top and bottom of the hour
-					RealTime( rTime )
-					FullTime=Day_of_Year +(Hour/24)+(Minute/60)/60
-					  
-			        nitrateMeasurements   	' make nitrate measurement
-			        Delay(0,50,Sec)
 			        SDI12Read = TRUE
 					YSIMeasurements
 				    
-				    LowEOS_CO2Measurements '(wired to Diff 5)
-				    HighEOS_CO2Measurements '(wired to Diff 6)
-					WaterLevel_Measurements
-        		      
-            ' Go back to the SUNA Data stored in the shorter Raw table
-            ' accessthe data table and get the previous 20 values
-            ' read all the SUNA NO3 values to a temporary variable.
-            For L=1 To 20
-            NO3Vals(L)=SUNAShortRaw.Nitrate_mgL2(1,L)
-            NO3Vals2(L)=SUNAShortRaw.Nitrate_um2(1,L)
-            Abs254vals(L)=SUNAShortRaw.Absorbance_2542(1,L)
-            Brvals(L)=SUNAShortRaw.Bromide2(1,L)
-            Lvals(L)=SUNAShortRaw.LightAverage2(1,L)
-            Next L
-            ' perform some QA/QC on them
-            ' perform a basic QA/QC to remove any outliers
-       ' assuming that a valid NO3 value is accompanied by good values of other parameters
-					K=0
-  			   SUMNO3=0
-  			   SumNO32=0
-  			   SumAbs254=0
-  			   SumAbs350=0
-  			   SumBr=0
-  			   SumL=0
-          For M=1 To 20
-					   
-					 temp=NO3Vals(M)
-					 ' The range of 0 to 10 mgL is considered valid
-					 If ( temp <10)
-					 'If(temp > 0)
-					SUMNO3=SUMNO3+temp
-					
-					' this is a zone for valid numbers only , so pick them up
-					SumNO32=SumNO32+NO3Vals2(M)
-					SumAbs254=SumAbs254+Abs254vals(M)
-					SumAbs350=SumAbs350+Abs350vals(M)
-					SumBr=SumBr+Brvals(M)
-					SumL=SumL+Lvals(M)
-					K=K+1
-					'EndIf
-					 EndIf 
-					Next M
-					' if for some reason there are no valid CO2 values
-					If ( K=0 )
-           
-            Nitrate_mgL = NaN
-             Nitrate_um = NaN
-            Absorbance_254 = NaN
-            Absorbance_350 = NaN
-            Bromide =NaN
-            LightAverage = NaN
-           Else
-            Nitrate_mgL = SUMNO3/K 
-             Nitrate_um = SumNO32/K
-            Absorbance_254 = SumAbs254/K
-            Absorbance_350 = SumAbs350/K
-            Bromide =SumBr/K
-            LightAverage = SumL/K
-      
+				  
             
 					EndIf
 
 	        CallTable (WQual)
-			CallTable LowEOSCO2Full
-			CallTable LowEOSCO2Short
 
 			            
        EndIf  
