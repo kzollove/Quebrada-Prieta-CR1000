@@ -19,6 +19,10 @@
 	   Const MinBatteryVoltage = 11.2 ' battery voltage at which to stop the SUNA
 		 Public rTime(9),FullTime 'declare as public and dimension rTime to 9
 
+ 	Const NDays= 180 ' no of days of data stored in card.
+	   Const Ndata = NDays*(60/meas_freq)*24*suna_scans ' for long frames
+	   Const SData=((60/meas_freq)*24*NDays)*10' multiply the number by 10 .
+
 	  ' YSI EXO
 	Const SDI12Vals = 13 'max number SDI12 values to be returned
     Const SDI12Freq = 17 'minutes
